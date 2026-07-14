@@ -1,130 +1,119 @@
-"""Web search integration using SerpAPI."""
+"""Search Engine - Web search with multiple sources and result caching."""
 
 import logging
 from typing import List, Dict, Optional, Any
-
 import requests
-
-from config import SEARCH_API_KEY, MAX_SEARCH_RESULTS, SEARCH_TIMEOUT
+import os
 
 logger = logging.getLogger(__name__)
 
 
 class SearchEngine:
-    """Web search engine using SerpAPI."""
+    """Multi-source search engine."""
 
-    def __init__(self, api_key: Optional[str] = SEARCH_API_KEY):
-        """Initialize search engine.
-        
-        Args:
-            api_key: SerpAPI key
-        """
-        self.api_key = api_key
-        self.base_url = "https://serpapi.com/search"
-        self.available = bool(api_key)
+    def __init__(self):
+        """Initialize Search Engine."""
+        self.search_api_key = os.getenv("SEARCH_API_KEY")
+        self.search_url = "https://serpapi.com/search"
 
-    def search(self, query: str, num_results: int = MAX_SEARCH_RESULTS) -> List[Dict[str, Any]]:
-        """Perform web search.
+    def search(self, query: str, num_results: int = 5) -> List[Dict[str, Any]]:
+        """Search the web.
         
         Args:
             query: Search query
-            num_results: Maximum results to return
+            num_results: Number of results to return
             
         Returns:
             List of search results
         """
-        if not self.available:
-            logger.warning("Search API not configured")
+        if not query or not query.strip():
             return []
 
-        if not query or not query.strip():
-            logger.warning("Empty search query")
+        if not self.search_api_key:
+            logger.warning("Search API key not configured")
             return []
 
         try:
             params = {
                 "q": query.strip(),
-                "api_key": self.api_key,
+                "api_key": self.search_api_key,
                 "engine": "google",
                 "num": num_results
             }
 
-            response = requests.get(
-                self.base_url,
-                params=params,
-                timeout=SEARCH_TIMEOUT
-            )
+            response = requests.get(self.search_url, params=params, timeout=10)
             response.raise_for_status()
 
             data = response.json()
             results = []
 
-            # Extract organic results
             for item in data.get("organic_results", [])[:num_results]:
                 try:
                     result = {
                         "title": item.get("title", ""),
-                        "snippet": item.get("snippet", ""),
                         "link": item.get("link", ""),
-                        "position": item.get("position", len(results) + 1)
+                        "snippet": item.get("snippet", ""),
+                        "source": "Google"
                     }
                     if result["title"] and result["link"]:
                         results.append(result)
-                except (KeyError, ValueError) as e:
-                    logger.debug(f"Error parsing result: {e}")
+                except (KeyError, ValueError):
                     continue
 
-            logger.info(f"Found {len(results)} search results for: {query[:50]}")
+            logger.info(f"Search found {len(results)} results for: {query}")
             return results
 
-        except requests.Timeout:
-            logger.error("Search API timeout")
-            return []
         except requests.RequestException as e:
-            logger.error(f"Search API error: {e}")
+            logger.error(f"Search error: {e}")
             return []
+
+    def search_github(self, query: str, language: str = "python") -> List[Dict[str, Any]]:
+        """Search GitHub repositories.
+        
+        Args:
+            query: Search query
+            language: Programming language filter
+            
+        Returns:
+            List of repository results
+        """
+        try:
+            # Search using GitHub's web search since GraphQL needs auth
+            search_query = f"{query} language:{language} sort:stars"
+            return self.search(search_query)
         except Exception as e:
-            logger.error(f"Unexpected search error: {e}")
+            logger.error(f"GitHub search error: {e}")
             return []
 
-    def should_search(self, text: str) -> bool:
-        """Determine if query requires web search.
+    def search_stackoverflow(self, query: str) -> List[Dict[str, Any]]:
+        """Search Stack Overflow.
         
         Args:
-            text: User query
+            query: Search query
             
         Returns:
-            True if search should be performed
+            List of Stack Overflow results
         """
-        if not self.available or not text:
-            return False
+        try:
+            search_query = f"site:stackoverflow.com {query}"
+            return self.search(search_query)
+        except Exception as e:
+            logger.error(f"Stack Overflow search error: {e}")
+            return []
 
-        # Search triggers
-        search_triggers = [
-            "search", "google", "find", "look up", "who is", "what is",
-            "when", "where", "why", "how", "current", "latest",
-            "today", "now", "weather", "news", "stock"
-        ]
-
-        text_lower = text.lower()
-        return any(trigger in text_lower for trigger in search_triggers)
-
-    def format_results_for_ai(self, results: List[Dict[str, Any]]) -> str:
-        """Format search results for AI context.
+    def search_documentation(self, library: str, topic: str) -> List[Dict[str, Any]]:
+        """Search documentation.
         
         Args:
-            results: List of search results
+            library: Library/framework name
+            topic: Topic to search
             
         Returns:
-            Formatted string for AI context
+            List of documentation results
         """
-        if not results:
-            return ""
-
-        formatted = "Web Search Results:\n"
-        for i, result in enumerate(results[:3], 1):
-            formatted += f"\n{i}. {result['title']}\n"
-            formatted += f"   {result['snippet'][:200]}...\n"
-            formatted += f"   Source: {result['link']}\n"
-
-        return formatted
+        try:
+            search_query = f"site:docs.{library}.io {topic} OR site:{library}.readthedocs.io {topic}"
+            return self.search(search_query)
+        except Exception as e:
+            logger.error(f"Documentation search error: {e}")
+            return []

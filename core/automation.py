@@ -1,229 +1,132 @@
-"""Computer automation tasks."""
+"""Automation Engine - System automation and file operations."""
 
 import logging
 import subprocess
-import webbrowser
-import os
-from pathlib import Path
-from typing import Optional, List, Dict, Any
-
-try:
-    import pyautogui
-    import pyperclip
-    import psutil
-    import cv2
-except ImportError:
-    pyautogui = None
-    pyperclip = None
-    psutil = None
-    cv2 = None
+import time
+from typing import Dict, List, Optional, Any
 
 logger = logging.getLogger(__name__)
 
 
-class AutomationManager:
-    """Handles system automation tasks."""
+class AutomationEngine:
+    """Automate system tasks."""
 
     def __init__(self):
-        """Initialize automation manager."""
-        self.pyautogui_available = pyautogui is not None
-        self.clipboard_available = pyperclip is not None
-        self.psutil_available = psutil is not None
-        self.vision_available = cv2 is not None
+        """Initialize Automation Engine."""
+        pass
 
-    def open_application(self, app_name: str) -> bool:
-        """Open an application.
+    def open_application(self, app_name: str) -> Dict[str, Any]:
+        """Open application.
         
         Args:
-            app_name: Application name or path
+            app_name: Application name
             
         Returns:
-            True if successful
+            Operation status
         """
         try:
-            if os.name == 'nt':  # Windows
-                subprocess.Popen(f'start {app_name}', shell=True)
-            elif os.name == 'posix':  # macOS/Linux
-                subprocess.Popen(['open', '-a', app_name])
+            import platform
+            system = platform.system()
+
+            if system == "Windows":
+                subprocess.Popen(f"start {app_name}", shell=True)
+            elif system == "Darwin":  # macOS
+                subprocess.Popen(["open", "-a", app_name])
+            else:  # Linux
+                subprocess.Popen([app_name])
+
             logger.info(f"Opened application: {app_name}")
-            return True
+            return {"success": True, "app": app_name}
         except Exception as e:
-            logger.error(f"Failed to open application: {e}")
-            return False
+            logger.error(f"Error opening application: {e}")
+            return {"success": False, "error": str(e)}
 
-    def open_website(self, url: str) -> bool:
-        """Open a website in browser.
+    def open_website(self, url: str) -> Dict[str, Any]:
+        """Open website in default browser.
         
         Args:
-            url: URL to open
+            url: Website URL
             
         Returns:
-            True if successful
+            Operation status
         """
         try:
-            if not url.startswith('http'):
-                url = f'https://{url}'
+            import webbrowser
             webbrowser.open(url)
             logger.info(f"Opened website: {url}")
-            return True
+            return {"success": True, "url": url}
         except Exception as e:
-            logger.error(f"Failed to open website: {e}")
-            return False
+            logger.error(f"Error opening website: {e}")
+            return {"success": False, "error": str(e)}
 
-    def copy_to_clipboard(self, text: str) -> bool:
-        """Copy text to clipboard.
+    def take_screenshot(self, save_path: str = "screenshot.png") -> Dict[str, Any]:
+        """Take screenshot.
+        
+        Args:
+            save_path: Path to save screenshot
+            
+        Returns:
+            Screenshot status
+        """
+        try:
+            from PIL import ImageGrab
+            screenshot = ImageGrab.grab()
+            screenshot.save(save_path)
+            logger.info(f"Screenshot saved: {save_path}")
+            return {"success": True, "path": save_path}
+        except Exception as e:
+            logger.error(f"Screenshot error: {e}")
+            return {"success": False, "error": str(e)}
+
+    def get_clipboard(self) -> str:
+        """Get clipboard content.
+        
+        Returns:
+            Clipboard text
+        """
+        try:
+            import pyperclip
+            return pyperclip.paste()
+        except Exception as e:
+            logger.error(f"Clipboard read error: {e}")
+            return ""
+
+    def set_clipboard(self, text: str) -> Dict[str, Any]:
+        """Set clipboard content.
         
         Args:
             text: Text to copy
             
         Returns:
-            True if successful
+            Operation status
         """
-        if not self.clipboard_available:
-            logger.warning("Clipboard not available")
-            return False
-
         try:
+            import pyperclip
             pyperclip.copy(text)
-            logger.debug(f"Copied to clipboard: {text[:50]}...")
-            return True
+            logger.info("Clipboard updated")
+            return {"success": True}
         except Exception as e:
-            logger.error(f"Failed to copy to clipboard: {e}")
-            return False
-
-    def get_clipboard(self) -> Optional[str]:
-        """Get clipboard contents.
-        
-        Returns:
-            Clipboard text or None
-        """
-        if not self.clipboard_available:
-            return None
-
-        try:
-            text = pyperclip.paste()
-            logger.debug(f"Retrieved clipboard: {text[:50]}...")
-            return text
-        except Exception as e:
-            logger.error(f"Failed to get clipboard: {e}")
-            return None
+            logger.error(f"Clipboard write error: {e}")
+            return {"success": False, "error": str(e)}
 
     def get_system_info(self) -> Dict[str, Any]:
         """Get system information.
         
         Returns:
-            Dictionary with system info
+            System info
         """
-        if not self.psutil_available:
-            return {"error": "psutil not available"}
-
         try:
+            import psutil
+            import platform
+
             return {
+                "platform": platform.platform(),
                 "cpu_percent": psutil.cpu_percent(interval=1),
                 "memory_percent": psutil.virtual_memory().percent,
-                "disk_percent": psutil.disk_usage('/').percent,
+                "disk_percent": psutil.disk_usage("/").percent,
                 "cpu_count": psutil.cpu_count(),
-                "total_memory_gb": round(psutil.virtual_memory().total / (1024**3), 2),
-                "available_memory_gb": round(psutil.virtual_memory().available / (1024**3), 2)
+                "boot_time": psutil.boot_time()
             }
         except Exception as e:
-            logger.error(f"Failed to get system info: {e}")
-            return {"error": str(e)}
-
-    def take_screenshot(self, filepath: Optional[str] = None) -> Optional[str]:
-        """Take a screenshot.
-        
-        Args:
-            filepath: Where to save screenshot
-            
-        Returns:
-            Path to saved screenshot or None
-        """
-        if not self.vision_available:
-            logger.warning("Vision not available")
-            return None
-
-        try:
-            if not filepath:
-                filepath = "screenshot.png"
-            
-            screenshot = pyautogui.screenshot()
-            screenshot.save(filepath)
-            logger.info(f"Screenshot saved to {filepath}")
-            return filepath
-        except Exception as e:
-            logger.error(f"Failed to take screenshot: {e}")
-            return None
-
-    def list_files(self, directory: str = ".", max_items: int = 20) -> List[Dict[str, Any]]:
-        """List files in directory.
-        
-        Args:
-            directory: Directory path
-            max_items: Maximum items to return
-            
-        Returns:
-            List of file info
-        """
-        try:
-            path = Path(directory).expanduser()
-            files = []
-            
-            for item in sorted(path.iterdir())[:max_items]:
-                files.append({
-                    "name": item.name,
-                    "type": "directory" if item.is_dir() else "file",
-                    "size_kb": round(item.stat().st_size / 1024, 2) if item.is_file() else 0,
-                    "path": str(item)
-                })
-            
-            logger.info(f"Listed {len(files)} items in {directory}")
-            return files
-        except Exception as e:
-            logger.error(f"Failed to list files: {e}")
-            return []
-
-    def mouse_click(self, x: int, y: int, button: str = "left") -> bool:
-        """Simulate mouse click.
-        
-        Args:
-            x: X coordinate
-            y: Y coordinate
-            button: Mouse button (left/right/middle)
-            
-        Returns:
-            True if successful
-        """
-        if not self.pyautogui_available:
-            logger.warning("PyAutoGUI not available")
-            return False
-
-        try:
-            pyautogui.click(x, y, button=button)
-            logger.debug(f"Mouse click at ({x}, {y}) - {button}")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to click mouse: {e}")
-            return False
-
-    def type_text(self, text: str, interval: float = 0.05) -> bool:
-        """Simulate typing.
-        
-        Args:
-            text: Text to type
-            interval: Delay between keystrokes
-            
-        Returns:
-            True if successful
-        """
-        if not self.pyautogui_available:
-            logger.warning("PyAutoGUI not available")
-            return False
-
-        try:
-            pyautogui.typewrite(text, interval=interval)
-            logger.debug(f"Typed: {text[:50]}...")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to type: {e}")
-            return False
+            logger.error(f"System info error: {e}")
+            return {}

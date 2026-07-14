@@ -1,201 +1,169 @@
-"""Advanced voice processing with wake word detection and TTS."""
+"""Voice Manager - Continuous listening, recognition, and TTS with GUI responsiveness."""
 
-import logging
 import asyncio
-import os
-from threading import Thread
-from typing import Optional, Callable
+import logging
+import threading
+from typing import Optional, Callable, Any
 from queue import Queue
-
-import speech_recognition as sr
-
-from config import (
-    VOICE_NAME, MIC_DEVICE_INDEX, VOICE_TIMEOUT,
-    VOICE_PHRASE_LIMIT, ENABLE_WAKE_WORD, WAKE_WORD
-)
 
 logger = logging.getLogger(__name__)
 
-# Import optional dependencies
-try:
-    import edge_tts
-except ImportError:
-    edge_tts = None
-    logger.warning("edge-tts not installed")
-
-try:
-    import pygame
-    pygame.mixer.init()
-except ImportError:
-    pygame = None
-    logger.warning("pygame not installed")
-
 
 class VoiceManager:
-    """Manages voice input and output."""
+    """Manage voice input/output with background processing."""
 
-    def __init__(self):
-        """Initialize voice manager."""
-        self.recognizer = sr.Recognizer()
+    def __init__(self, wake_word: str = "jarvis"):
+        """Initialize Voice Manager.
+        
+        Args:
+            wake_word: Wake word to trigger listening
+        """
+        self.wake_word = wake_word.lower()
         self.is_listening = False
-        self.microphone_available = self._check_microphone()
-        self.tts_available = edge_tts is not None and pygame is not None
+        self.is_speaking = False
+        self.recognition = None
+        self.microphone = None
+        self.listener_thread = None
+        self.speaker_queue: Queue = Queue()
+        self.speech_queue: Queue = Queue()
+        self._init_voice_engines()
 
-    def _check_microphone(self) -> bool:
-        """Check if microphone is available.
-        
-        Returns:
-            True if microphone detected
-        """
+    def _init_voice_engines(self) -> None:
+        """Initialize speech recognition and TTS engines."""
         try:
-            with sr.Microphone(device_index=MIC_DEVICE_INDEX) as source:
-                logger.info(f"Microphone available at index {MIC_DEVICE_INDEX}")
-                return True
+            import speech_recognition as sr
+            self.recognition = sr.Recognizer()
+            self.microphone = sr.Microphone()
+            logger.info("✓ Speech recognition initialized")
         except Exception as e:
-            logger.error(f"Microphone not available: {e}")
-            return False
+            logger.error(f"Speech recognition init failed: {e}")
 
-    def listen(self, timeout: int = VOICE_TIMEOUT) -> Optional[str]:
-        """Listen to microphone input.
+        try:
+            import edge_tts
+            logger.info("✓ Edge TTS initialized")
+        except Exception as e:
+            logger.error(f"Edge TTS init failed: {e}")
+
+    def start_listening(self, on_recognized: Callable[[str], Any]) -> None:
+        """Start background listening thread.
         
         Args:
-            timeout: Timeout in seconds
-            
-        Returns:
-            Recognized text or None
+            on_recognized: Callback function for recognized speech
         """
-        if not self.microphone_available:
-            logger.error("Microphone not available")
-            return None
+        if self.is_listening:
+            return
 
-        try:
-            with sr.Microphone(device_index=MIC_DEVICE_INDEX) as source:
-                self.recognizer.adjust_for_ambient_noise(source, duration=1)
-                logger.info("Listening...")
-                
-                audio = self.recognizer.listen(
-                    source,
-                    timeout=timeout,
-                    phrase_time_limit=VOICE_PHRASE_LIMIT
-                )
+        self.is_listening = True
+        self.listener_thread = threading.Thread(
+            target=self._listen_loop,
+            args=(on_recognized,),
+            daemon=True
+        )
+        self.listener_thread.start()
+        logger.info("Voice listening started")
 
-            # Try Google Speech Recognition
+    def stop_listening(self) -> None:
+        """Stop listening thread."""
+        self.is_listening = False
+        if self.listener_thread:
+            self.listener_thread.join(timeout=5)
+        logger.info("Voice listening stopped")
+
+    def _listen_loop(self, on_recognized: Callable[[str], Any]) -> None:
+        """Main listening loop."""
+        while self.is_listening:
             try:
-                text = self.recognizer.recognize_google(audio)
-                logger.info(f"Recognized: {text}")
-                return text
-            except sr.UnknownValueError:
-                logger.debug("Could not understand audio")
-                return None
-            except sr.RequestError as e:
-                logger.error(f"Speech recognition API error: {e}")
-                return None
+                if not self.recognition or not self.microphone:
+                    return
 
-        except sr.MicrophoneError as e:
-            logger.error(f"Microphone error: {e}")
-            return None
-        except sr.RequestError as e:
-            logger.error(f"Microphone request error: {e}")
-            return None
-        except Exception as e:
-            logger.error(f"Unexpected voice error: {e}")
-            return None
+                with self.microphone as source:
+                    self.recognition.adjust_for_ambient_noise(source, duration=0.5)
+                    audio = self.recognition.listen(source, timeout=5, phrase_time_limit=10)
 
-    def listen_for_wake_word(self, timeout: int = 30) -> bool:
-        """Listen for wake word.
-        
-        Args:
-            timeout: Timeout in seconds
-            
-        Returns:
-            True if wake word detected
-        """
-        if not ENABLE_WAKE_WORD:
-            return True
+                # Process in thread to avoid blocking
+                threading.Thread(
+                    target=self._process_audio,
+                    args=(audio, on_recognized),
+                    daemon=True
+                ).start()
 
-        text = self.listen(timeout=timeout)
-        if text and WAKE_WORD.lower() in text.lower():
-            logger.info(f"Wake word '{WAKE_WORD}' detected")
-            return True
-        return False
+            except Exception as e:
+                logger.debug(f"Listening error: {e}")
 
-    def speak(self, text: str, use_threading: bool = True) -> bool:
-        """Generate and play speech.
-        
-        Args:
-            text: Text to speak
-            use_threading: Whether to use threading to avoid blocking
-            
-        Returns:
-            True if successful
-        """
-        if not text or not text.strip():
-            return False
-
-        if not self.tts_available:
-            logger.warning("Text-to-speech not available")
-            logger.info(f"Text: {text}")
-            return False
-
-        if use_threading:
-            thread = Thread(target=self._speak_internal, args=(text,), daemon=True)
-            thread.start()
-            return True
-        else:
-            return self._speak_internal(text)
-
-    def _speak_internal(self, text: str) -> bool:
-        """Internal speech generation.
-        
-        Args:
-            text: Text to speak
-            
-        Returns:
-            True if successful
-        """
+    def _process_audio(self, audio: Any, callback: Callable[[str], Any]) -> None:
+        """Process recognized audio."""
         try:
-            # Generate speech
-            audio_file = "temp_voice.mp3"
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            
-            async def generate():
-                comm = edge_tts.Communicate(text, VOICE_NAME)
-                await comm.save(audio_file)
-            
-            loop.run_until_complete(generate())
-            loop.close()
+            if not self.recognition:
+                return
 
-            # Play audio
-            if os.path.exists(audio_file):
-                pygame.mixer.music.load(audio_file)
+            text = self.recognition.recognize_google(audio)
+            logger.info(f"Recognized: {text}")
+
+            if self.wake_word in text.lower():
+                # Extract command after wake word
+                command = text.lower().replace(self.wake_word, "").strip()
+                if command:
+                    callback(command)
+            else:
+                callback(text)
+
+        except Exception as e:
+            logger.debug(f"Audio processing error: {e}")
+
+    async def speak(self, text: str, voice: str = "en-US-GuyNeural") -> None:
+        """Speak text using TTS.
+        
+        Args:
+            text: Text to speak
+            voice: Voice name
+        """
+        if not text or self.is_speaking:
+            return
+
+        try:
+            import edge_tts
+            
+            self.is_speaking = True
+            
+            # Generate speech in background
+            communicate = edge_tts.Communicate(text, voice)
+            
+            # Use pygame for playback
+            import pygame
+            import tempfile
+            
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
+                await communicate.save(tmp.name)
+                
+                pygame.mixer.music.load(tmp.name)
                 pygame.mixer.music.play()
                 
+                # Wait for playback to finish
                 while pygame.mixer.music.get_busy():
-                    pygame.time.Clock().tick(10)
+                    await asyncio.sleep(0.1)
                 
-                # Cleanup
-                try:
-                    pygame.mixer.music.stop()
-                    os.remove(audio_file)
-                except Exception as e:
-                    logger.debug(f"Cleanup error: {e}")
-
-            return True
-        except Exception as e:
-            logger.error(f"Speech generation failed: {e}")
-            return False
-
-    def get_available_microphones(self) -> list:
-        """Get list of available microphones.
+                logger.info(f"Spoken: {text[:50]}...")
         
-        Returns:
-            List of microphone device info
-        """
-        try:
-            mics = sr.Microphone.list_microphone_indexes()
-            logger.info(f"Found {len(mics)} microphones")
-            return mics
         except Exception as e:
-            logger.error(f"Error listing microphones: {e}")
-            return []
+            logger.error(f"TTS error: {e}")
+        finally:
+            self.is_speaking = False
+
+    def stop_speaking(self) -> None:
+        """Stop current speech."""
+        try:
+            import pygame
+            pygame.mixer.music.stop()
+            self.is_speaking = False
+            logger.info("Speech stopped")
+        except Exception as e:
+            logger.error(f"Error stopping speech: {e}")
+
+    def get_status(self) -> dict:
+        """Get voice status."""
+        return {
+            "listening": self.is_listening,
+            "speaking": self.is_speaking,
+            "recognition_available": bool(self.recognition),
+            "microphone_available": bool(self.microphone)
+        }
