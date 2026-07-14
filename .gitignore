@@ -1,6 +1,7 @@
 .env
 .env.local
 *.db
+*.db-journal
 *.mp3
 *.wav
 __pycache__/
@@ -21,3 +22,6 @@ data/
 .vscode/
 *.swp
 *.swo
+.project
+.classpath
+*.tmp

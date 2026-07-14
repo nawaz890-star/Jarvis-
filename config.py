@@ -1,4 +1,4 @@
-"""Configuration management for JARVIS Pro."""
+"""Production configuration management for JARVIS Pro v3.0."""
 
 import os
 import logging
@@ -70,16 +70,22 @@ ASSISTANT_NAME: str = os.getenv("ASSISTANT_NAME", "Jarvis").strip()
 USER_NAME: str = os.getenv("USER_NAME", "User").strip()
 ASSISTANT_VERSION: str = "3.0.0"
 
-SYSTEM_PROMPT: str = f"""You are {ASSISTANT_NAME}, an advanced AI assistant with the following capabilities:
-- Engage in natural conversations
-- Answer questions on virtually any topic
-- Help with coding and programming
-- Provide web search results when needed
-- Assist with automation and system tasks
-- Remember previous conversations
-- Be helpful, harmless, and honest
+SYSTEM_PROMPT: str = f"""You are {ASSISTANT_NAME}, an advanced AI assistant. You are helpful, friendly, and professional.
 
-Keep responses clear, concise, and engaging. Use markdown formatting when appropriate."""
+Capabilities:
+- Natural conversation and problem-solving
+- Web search integration for current information
+- Code generation and explanation
+- System automation and file operations
+- Screenshot and vision analysis
+- Conversation memory and context awareness
+
+Behavior:
+- Keep responses concise and clear
+- Use markdown formatting for better readability
+- Proactively offer help based on context
+- Be honest about limitations
+- Prioritize user safety and privacy"""
 
 # ============================================================================
 # Features Configuration
@@ -98,7 +104,7 @@ COMMAND_ALLOWLIST: list = [
 
 denylist_str = os.getenv(
     "COMMAND_DENYLIST",
-    "rm,format,shutdown,reboot,del,wipe,sudo,dd,mkfs"
+    "rm,format,shutdown,reboot,del,wipe,sudo,dd,mkfs,fdisk"
 ).strip()
 COMMAND_DENYLIST: list = [cmd.strip() for cmd in denylist_str.split(",") if cmd.strip()]
 
@@ -109,6 +115,15 @@ GUI_THEME: str = "dark"
 GUI_WIDTH: int = 1200
 GUI_HEIGHT: int = 700
 GUI_FONT_SIZE: int = 11
+GUI_FONT_FAMILY: str = "Segoe UI"
+
+# ============================================================================
+# Performance and Threading
+# ============================================================================
+MAX_THREADS: int = 4
+QUEUE_TIMEOUT: float = 30.0
+REQUEST_TIMEOUT: int = 30
+AI_RESPONSE_TIMEOUT: int = 60
 
 # ============================================================================
 # Debug and Logging
@@ -120,6 +135,15 @@ if DEBUG_MODE:
     logger.info("Debug mode enabled")
 
 # ============================================================================
+# Paths
+# ============================================================================
+PROJECT_ROOT: Path = Path(__file__).parent
+DATA_DIR: Path = PROJECT_ROOT / "data"
+LOGS_DIR: Path = DATA_DIR / "logs"
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+LOGS_DIR.mkdir(parents=True, exist_ok=True)
+
+# ============================================================================
 # Validation
 # ============================================================================
 if not GEMINI_API_KEY and not OPENAI_API_KEY:
@@ -128,10 +152,10 @@ if not GEMINI_API_KEY and not OPENAI_API_KEY:
     )
 
 if not SEARCH_API_KEY:
-    logger.warning(
+    logger.info(
         "Search API key not configured. Web search will be disabled. "
         "Set SEARCH_API_KEY in .env to enable."
     )
 
-logger.info(f"JARVIS {ASSISTANT_VERSION} initialized with config: "
+logger.info(f"JARVIS {ASSISTANT_VERSION} initialized - "
             f"Name={ASSISTANT_NAME}, User={USER_NAME}, DB={DATABASE_PATH}")
