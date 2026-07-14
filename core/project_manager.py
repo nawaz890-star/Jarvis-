@@ -1,8 +1,6 @@
 """Project management and file system utilities for coding tasks."""
 
 import logging
-import os
-import shutil
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 

@@ -3,10 +3,7 @@
 import logging
 import copy
 import json
-import subprocess
-import platform
 from typing import Optional, List, Dict, Any, Generator
-from pathlib import Path
 
 from config import (
     GEMINI_API_KEY, OPENAI_API_KEY, SYSTEM_PROMPT, AI_RESPONSE_TIMEOUT,

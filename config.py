@@ -1,4 +1,4 @@
-"""Production configuration management for JARVIS Pro v3.0."""
+"""Production configuration management for JARVIS Pro v3.1."""
 
 import os
 import logging
@@ -31,7 +31,7 @@ SEARCH_API_KEY: Optional[str] = os.getenv("SEARCH_API_KEY", "").strip() or None
 # ============================================================================
 ENABLE_OLLAMA: bool = os.getenv("ENABLE_OLLAMA", "false").lower() in ("1", "true", "yes")
 OLLAMA_HOST: str = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "mistral")  # Options: mistral, llama2, neural-chat, etc.
+OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "mistral")
 
 # ============================================================================
 # Voice Configuration
@@ -46,7 +46,6 @@ except (ValueError, TypeError):
     MIC_DEVICE_INDEX = 0
     logger.warning("Invalid MIC_DEVICE_INDEX, using default: 0")
 
-# Voice processing settings
 VOICE_TIMEOUT: int = 10
 VOICE_PHRASE_LIMIT: int = 10
 VOICE_CONFIDENCE_THRESHOLD: float = 0.5
@@ -62,13 +61,11 @@ try:
     MEMORY_MAX_ITEMS: int = int(os.getenv("MEMORY_MAX_ITEMS", "500"))
 except (ValueError, TypeError):
     MEMORY_MAX_ITEMS = 500
-    logger.warning("Invalid MEMORY_MAX_ITEMS, using default: 500")
 
 try:
     MEMORY_TTL_DAYS: int = int(os.getenv("MEMORY_TTL_DAYS", "90"))
 except (ValueError, TypeError):
     MEMORY_TTL_DAYS = 90
-    logger.warning("Invalid MEMORY_TTL_DAYS, using default: 90")
 
 # ============================================================================
 # Assistant Personality
@@ -152,7 +149,6 @@ DEBUG_MODE: bool = os.getenv("DEBUG_MODE", "false").lower() in ("1", "true", "ye
 
 if DEBUG_MODE:
     logging.getLogger().setLevel(logging.DEBUG)
-    logger.info("Debug mode enabled")
 
 # ============================================================================
 # Paths
@@ -170,7 +166,7 @@ CODE_PROJECTS_DIR.mkdir(parents=True, exist_ok=True)
 # ============================================================================
 if not GEMINI_API_KEY and not OPENAI_API_KEY and not ENABLE_OLLAMA:
     logger.warning(
-        "No AI API keys or Ollama configured. Set GEMINI_API_KEY, OPENAI_API_KEY, or enable Ollama in .env"
+        "No AI API keys or Ollama configured. Set GEMINI_API_KEY, OPENAI_API_KEY, or enable Ollama"
     )
 
 if not SEARCH_API_KEY:

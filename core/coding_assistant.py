@@ -2,7 +2,7 @@
 
 import logging
 import re
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Dict, List, Optional, Any
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
