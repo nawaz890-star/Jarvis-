@@ -27,6 +27,13 @@ OPENAI_API_KEY: Optional[str] = os.getenv("OPENAI_API_KEY", "").strip() or None
 SEARCH_API_KEY: Optional[str] = os.getenv("SEARCH_API_KEY", "").strip() or None
 
 # ============================================================================
+# Ollama Configuration (Local LLM)
+# ============================================================================
+ENABLE_OLLAMA: bool = os.getenv("ENABLE_OLLAMA", "false").lower() in ("1", "true", "yes")
+OLLAMA_HOST: str = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "mistral")  # Options: mistral, llama2, neural-chat, etc.
+
+# ============================================================================
 # Voice Configuration
 # ============================================================================
 VOICE_NAME: str = os.getenv("VOICE_NAME", "en-US-GuyNeural").strip()
@@ -68,16 +75,18 @@ except (ValueError, TypeError):
 # ============================================================================
 ASSISTANT_NAME: str = os.getenv("ASSISTANT_NAME", "Jarvis").strip()
 USER_NAME: str = os.getenv("USER_NAME", "User").strip()
-ASSISTANT_VERSION: str = "3.0.0"
+ASSISTANT_VERSION: str = "3.1.0"
 
 SYSTEM_PROMPT: str = f"""You are {ASSISTANT_NAME}, an advanced AI assistant. You are helpful, friendly, and professional.
 
 Capabilities:
 - Natural conversation and problem-solving
 - Web search integration for current information
-- Code generation and explanation
+- Code generation and explanation (Python, JavaScript, TypeScript, Java, C++, C#, PHP, SQL, HTML, CSS, React, Vue, Angular, Node.js, Next.js)
+- Website generation and component building
 - System automation and file operations
 - Screenshot and vision analysis
+- Project management and scaffolding
 - Conversation memory and context awareness
 
 Behavior:
@@ -93,6 +102,17 @@ Behavior:
 AUTO_WEB_SEARCH_ENABLE: bool = os.getenv("AUTO_WEB_SEARCH_ENABLE", "true").lower() in ("1", "true", "yes")
 MAX_SEARCH_RESULTS: int = 5
 SEARCH_TIMEOUT: int = 10
+
+# ============================================================================
+# Coding Assistant
+# ============================================================================
+ENABLE_CODING_ASSISTANT: bool = os.getenv("ENABLE_CODING_ASSISTANT", "true").lower() in ("1", "true", "yes")
+
+# ============================================================================
+# Website Generator
+# ============================================================================
+ENABLE_WEBSITE_GENERATOR: bool = os.getenv("ENABLE_WEBSITE_GENERATOR", "true").lower() in ("1", "true", "yes")
+DEFAULT_FRAMEWORK: str = os.getenv("DEFAULT_FRAMEWORK", "react").strip().lower()
 
 # ============================================================================
 # Security
@@ -140,15 +160,17 @@ if DEBUG_MODE:
 PROJECT_ROOT: Path = Path(__file__).parent
 DATA_DIR: Path = PROJECT_ROOT / "data"
 LOGS_DIR: Path = DATA_DIR / "logs"
+CODE_PROJECTS_DIR: Path = DATA_DIR / "projects"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
+CODE_PROJECTS_DIR.mkdir(parents=True, exist_ok=True)
 
 # ============================================================================
 # Validation
 # ============================================================================
-if not GEMINI_API_KEY and not OPENAI_API_KEY:
+if not GEMINI_API_KEY and not OPENAI_API_KEY and not ENABLE_OLLAMA:
     logger.warning(
-        "No AI API keys configured. Set GEMINI_API_KEY or OPENAI_API_KEY in .env"
+        "No AI API keys or Ollama configured. Set GEMINI_API_KEY, OPENAI_API_KEY, or enable Ollama in .env"
     )
 
 if not SEARCH_API_KEY:
